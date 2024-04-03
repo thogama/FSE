@@ -1,72 +1,53 @@
-#include <LiquidCrystal.h>
+#include <WiFi.h>
 #include <UniversalTelegramBot.h>
-#include <WiFi.h> // Biblioteca para ESP32
+#include <WiFiClientSecure.h>
 
-const char* ssid = "IDMNET-WIFI_AJU"; // usar dados moveis
-const char* password = "oliveira987";
+const char* ssid = "IDMNET-WIFI_AJU"; // Nome da rede WiFi
+const char* password = "oliveira987"; // Senha da rede WiFi
+const char *telegramToken = "7141004931:AAE-mAGt3XA9NqwKWiqlY3y6I3uSNuQtEZM"; // Token do bot no Telegram
 
+WiFiClientSecure secured_client; // Cliente WiFi seguro para conexão com o Telegram
+UniversalTelegramBot bot(telegramToken, secured_client); // Objeto do bot do Telegram
+bool mensagemEnviada = false; // Flag para verificar se a mensagem foi enviada
 
-LiquidCrystal lcd(21, 22, 16, 17, 18, 19); 
-UniversalTelegramBot bot("7141004931:AAE-mAGt3XA9NqwKWiqlY3y6I3uSNuQtEZM");  // Fireman323Bot
-
-int sensor = 36; // Pino analógico para o sensor
-int val = 0;
-int limit = 40;
+int sensor = 36; // Pino analógico para o sensor de gás
+int limit = 40; // Limite para considerar a detecção de gás prejudicial
 
 void setup() {
-  Serial.begin(9600);
-  // declaring LEDs pins as OUTPUTS Pins and turned them off at the beginning.
-  pinMode(2, OUTPUT); // Pino para LED Vermelho
-  pinMode(4, OUTPUT); // Pino para LED Verde
-
-  digitalWrite(4, LOW); // Desliga o LED Verde
-  digitalWrite(2, LOW); // Desliga o LED Vermelho
-
-  // set up the LCD's number of columns and rows:
-  lcd.begin(16, 2);
-  // Print a message to the LCD.
-  lcd.print("Air Monitoring");
-  lcd.setCursor(0, 1);
-  lcd.print("System");
-  delay(500); 
-  lcd.clear();
-
-  // Conectar ao Wi-Fi
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println("Connected to WiFi");
+  Serial.begin(9600); // Inicialização da comunicação serial
+  connectToWiFi(); // Conectar-se à rede WiFi
+  sendMessageToTelegram(); // Enviar mensagem de inicialização para o Telegram
 }
 
 void loop() {
-  val = analogRead(sensor);         // Inicializa o valor da leitura do sensor.
-  val = map(val, 306, 750, 0, 100); // Mapeia a leitura do sensor para valores de 0 a 100.
-  Serial.println(val);              // Imprime a leitura do sensor no Monitor Serial.
+  int val = analogRead(sensor); // Realiza a leitura do sensor de gás
+  val = map(val, 306, 750, 0, 100); // Mapeia a leitura do sensor para valores de 0 a 100
 
-  // Se um gás prejudicial for detectado.
-  if (val > limit) {
-    lcd.setCursor(0, 0);
-    lcd.print("Harmful Gas is");  // Imprime uma mensagem no LCD.
-    lcd.setCursor(0, 1);
-    lcd.print("Detected");
-    digitalWrite(2, HIGH);        // Liga o LED Vermelho.
-    digitalWrite(4, LOW);         // Desliga o LED Verde.
-    tone(25, 1000);               // Ativa o Buzzer.
-    delay(100);                   // Som ativado por 100 ms.
-    noTone(25);                   // Desativa o Buzzer.
-    delay(100);
-    
-    // Envia uma mensagem para o Telegram
-    String message = "Harmful gas detected! Air Quality: ";
-    message += val;
-    bot.sendMessage("1454854984", message); // Substitua "ID_DO_CHAT" pelo ID do chat
+  if (val > limit) { // Se um gás prejudicial for detectado
+    String chat_id = "1454854984"; // ID do chat do Telegram para enviar a mensagem
+    String text = "Harmful gas detected! Air Quality: " + String(val); // Texto da mensagem a ser enviada
+    sendMessageToTelegram(chat_id, text); // Enviar mensagem para o Telegram
+    delay(5000); // Aguardar 5 segundos para evitar envio repetido de mensagens
   }
-  else { 
-    lcd.clear();                  // Limpa a mensagem do LCD.
-    noTone(25);                   // Desativa o Buzzer.
-    digitalWrite(2, LOW);         // Desliga o LED Vermelho.
-    digitalWrite(4, HIGH);        // Liga o LED Verde.
-  } 
+
+  delay(1000); // Esperar 1 segundo antes da próxima leitura do sensor
+}
+
+void connectToWiFi() {
+  WiFi.begin(ssid, password); // Iniciar conexão com a rede WiFi
+  secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Adicionar certificado raiz para api.telegram.org
+  while (WiFi.status() != WL_CONNECTED) { // Aguardar até que a conexão seja estabelecida
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("Conectado ao WiFi!"); // Indicar que a conexão WiFi foi estabelecida
+}
+
+void sendMessageToTelegram(String chat_id, String text) {
+  bool mensagemEnviada = bot.sendMessage(chat_id, text); // Tentar enviar a mensagem para o Telegram
+  if (mensagemEnviada) {
+    Serial.println("Mensagem enviada com sucesso!"); // Indicar que a mensagem foi enviada com sucesso
+  } else {
+    Serial.println("Falha ao enviar mensagem!"); // Indicar que houve uma falha ao enviar a mensagem
+  }
 }
